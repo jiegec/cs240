@@ -48,6 +48,41 @@ index e69de29..db9257d 100644
 +  "file": "src/thread.c"
 + }
 +]
+diff --git a/src/context_switch.S b/src/context_switch.S
+index e0186dc..67bd452 100644
+--- a/src/context_switch.S
++++ b/src/context_switch.S
+@@ -15,6 +15,30 @@
+ .globl grn_context_switch
+ grn_context_switch:
+   // FIXME: Save the old context, restore the new.
++  // old_context in rdi, new_context in rsi
++  movq %rsp, %rax
++  movq %rax, (%rdi)
++  movq %r15, %rax
++  movq %rax, 0x8(%rdi)
++  movq %r14, %rax
++  movq %rax, 0x10(%rdi)
++  movq %r13, %rax
++  movq %rax, 0x18(%rdi)
++  movq %r12, %rax
++  movq %rax, 0x20(%rdi)
++  movq %rbx, %rax
++  movq %rax, 0x28(%rdi)
++  movq %rbp, %rax
++  movq %rax, 0x30(%rdi)
++
++  movq (%rsi), %rax
++  movq 0x8(%rsi), %r15
++  movq 0x10(%rsi), %r14
++  movq 0x18(%rsi), %r13
++  movq 0x20(%rsi), %r12
++  movq 0x28(%rsi), %rbx
++  movq 0x30(%rsi), %rbp
++  ret
+ 
+ /**
+  * Initial function implicitly executed by a thread.
 diff --git a/src/thread.c b/src/thread.c
 index 4b51405..b081a8d 100644
 --- a/src/thread.c
