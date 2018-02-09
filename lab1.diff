@@ -1,0 +1,50 @@
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index e69de29..f5d622f 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -0,0 +1,3 @@
++{
++    "cquery.cacheDirectory": "${workspaceFolder}/.vscode/cquery_cached_index/"
++}
+\ No newline at end of file
+diff --git a/compile_commands.json b/compile_commands.json
+index e69de29..db9257d 100644
+--- a/compile_commands.json
++++ b/compile_commands.json
+@@ -0,0 +1,36 @@
++[
++ {
++  "directory": "/Volumes/Data/cs240/lab1", 
++  "arguments": [
++   "cc", 
++   "-Wall", 
++   "-Wextra", 
++   "-Werror", 
++   "-Wswitch-default", 
++   "-Wwrite-strings", 
++   "-Iinclude", 
++   "-Itest/include", 
++   "-std=gnu99", 
++   "-c", 
++   "src/main.c"
++  ], 
++  "file": "src/main.c"
++ }, 
++ {
++  "directory": "/Volumes/Data/cs240/lab1", 
++  "arguments": [
++   "cc", 
++   "-Wall", 
++   "-Wextra", 
++   "-Werror", 
++   "-Wswitch-default", 
++   "-Wwrite-strings", 
++   "-Iinclude", 
++   "-Itest/include", 
++   "-std=gnu99", 
++   "-c", 
++   "src/thread.c"
++  ], 
++  "file": "src/thread.c"
++ }
++]
