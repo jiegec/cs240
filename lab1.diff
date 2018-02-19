@@ -49,7 +49,7 @@ index e69de29..db9257d 100644
 + }
 +]
 diff --git a/src/context_switch.S b/src/context_switch.S
-index e0186dc..67bd452 100644
+index e0186dc..f83bebf 100644
 --- a/src/context_switch.S
 +++ b/src/context_switch.S
 @@ -15,6 +15,30 @@
@@ -72,7 +72,7 @@ index e0186dc..67bd452 100644
 +  movq %rbp, %rax
 +  movq %rax, 0x30(%rdi)
 +
-+  movq (%rsi), %rax
++  movq (%rsi), %rsp
 +  movq 0x8(%rsi), %r15
 +  movq 0x10(%rsi), %r14
 +  movq 0x18(%rsi), %r13
@@ -84,7 +84,7 @@ index e0186dc..67bd452 100644
  /**
   * Initial function implicitly executed by a thread.
 diff --git a/src/main.c b/src/main.c
-index 5e801b7..a80f571 100644
+index 5e801b7..b9618f0 100644
 --- a/src/main.c
 +++ b/src/main.c
 @@ -18,10 +18,7 @@
@@ -99,7 +99,44 @@ index 5e801b7..a80f571 100644
  
  /**
   * Initializes the choloros green thread library.
-@@ -83,7 +80,28 @@ void grn_gc() {
+@@ -55,10 +52,18 @@ void grn_init(bool preempt) {
+  * @return The thread ID of the newly spawned process.
+  */
+ int grn_spawn(grn_fn fn) {
+-  UNUSED(fn);
+-
+   // FIXME: Allocate a new thread, initialize its context, then yield.
+-  return 0;
++  grn_thread* new_thread = grn_new_thread(true);
++
++  uint64_t* stack_top = (uint64_t*)(new_thread->stack + STACK_SIZE);
++  *(--stack_top) = (uint64_t)fn;
++  *(--stack_top) = (uint64_t)start_thread;
++  new_thread->context.rsp = (uint64_t)stack_top;
++
++  new_thread->status = READY;
++
++  grn_yield();
++  return new_thread->id;
+ }
+ 
+ /**
+@@ -68,6 +73,14 @@ int grn_spawn(grn_fn fn) {
+  */
+ void grn_gc() {
+   // FIXME: Free the memory of zombied threads.
++  grn_thread* current_thread = STATE.threads;
++  while (current_thread) {
++    grn_thread* next_thread = current_thread->next;
++    if (current_thread->status == ZOMBIE) {
++      grn_destroy_thread(current_thread);
++    }
++    current_thread = next_thread;
++  }
+ }
+ 
+ /**
+@@ -83,7 +96,28 @@ void grn_gc() {
   */
  int grn_yield() {
    // FIXME: Yield the current thread's execution time to another READY thread.
@@ -129,7 +166,7 @@ index 5e801b7..a80f571 100644
  }
  
  /**
-@@ -97,7 +115,8 @@ int grn_yield() {
+@@ -97,7 +131,8 @@ int grn_yield() {
   */
  int grn_wait() {
    // Loop until grn_yield returns nonzero.
@@ -139,7 +176,7 @@ index 5e801b7..a80f571 100644
  
    return 0;
  }
-@@ -122,7 +141,9 @@ void grn_exit() {
+@@ -122,7 +157,9 @@ void grn_exit() {
  /**
   * For compatbility across name manglers.
   */
@@ -150,7 +187,7 @@ index 5e801b7..a80f571 100644
  
  /**
   * Returns a pointer to the current thread if there is one. This pointer is only
-@@ -131,6 +152,6 @@ void _grn_exit() { grn_exit(); }
+@@ -131,6 +168,6 @@ void _grn_exit() { grn_exit(); }
   * @return a pointer to the current thread or NULL if the library hasn't been
   * initialized
   */
@@ -159,7 +196,7 @@ index 5e801b7..a80f571 100644
    return STATE.current;
  }
 diff --git a/src/thread.c b/src/thread.c
-index 4b51405..b081a8d 100644
+index 4b51405..9fdd593 100644
 --- a/src/thread.c
 +++ b/src/thread.c
 @@ -31,7 +31,7 @@ int64_t atomic_next_id() {
@@ -202,7 +239,7 @@ index 4b51405..b081a8d 100644
 +  grn_thread* thread = (grn_thread*)malloc(sizeof(grn_thread));
 +  assert(thread);
 +
-+  memset(&thread->context, 0, sizeof(thread->context));
++  memset(thread, 0, sizeof(grn_thread));
 +  thread->id = atomic_next_id();
 +  thread->status = WAITING;
 +  add_thread(thread);
