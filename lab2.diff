@@ -1,0 +1,21 @@
+diff --git a/src/mapreduce/sequential_master.go b/src/mapreduce/sequential_master.go
+index dbc26ca..1924c2a 100644
+--- a/src/mapreduce/sequential_master.go
++++ b/src/mapreduce/sequential_master.go
+@@ -40,6 +40,16 @@ func (m *SequentialMaster) Start() {
+ 	// FIXME: Create a single worker and ask it to perform all of the map tasks
+ 	// followed by all of the reduce tasks. There is one map task per input
+ 	// file, and `m.NumReducers` number of reduce tasks.
++	worker := NewWorker(m.JobName, m.MapF, m.ReduceF)
++	worker.Start()
++	for i, file := range m.InputFileNames {
++		worker.DoMap(file, uint(i), m.NumReducers)
++	}
++	var i uint
++	for i = 0; i < m.NumReducers; i++ {
++		worker.DoReduce(i, 1)
++	}
++	worker.Shutdown()
+ }
+ 
+ // Merges the output of all reduce tasks into one file. Returns the filename for
