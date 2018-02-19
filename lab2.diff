@@ -1,8 +1,8 @@
 diff --git a/src/mapreduce/sequential_master.go b/src/mapreduce/sequential_master.go
-index dbc26ca..1924c2a 100644
+index dbc26ca..032853f 100644
 --- a/src/mapreduce/sequential_master.go
 +++ b/src/mapreduce/sequential_master.go
-@@ -40,6 +40,16 @@ func (m *SequentialMaster) Start() {
+@@ -40,6 +40,15 @@ func (m *SequentialMaster) Start() {
  	// FIXME: Create a single worker and ask it to perform all of the map tasks
  	// followed by all of the reduce tasks. There is one map task per input
  	// file, and `m.NumReducers` number of reduce tasks.
@@ -11,11 +11,170 @@ index dbc26ca..1924c2a 100644
 +	for i, file := range m.InputFileNames {
 +		worker.DoMap(file, uint(i), m.NumReducers)
 +	}
-+	var i uint
-+	for i = 0; i < m.NumReducers; i++ {
-+		worker.DoReduce(i, 1)
++	for i := 0; i < int(m.NumReducers); i++ {
++		worker.DoReduce(uint(i), uint(len(m.InputFileNames)))
 +	}
 +	worker.Shutdown()
  }
  
  // Merges the output of all reduce tasks into one file. Returns the filename for
+diff --git a/src/mapreduce/worker.go b/src/mapreduce/worker.go
+index 8af480c..423fe4c 100644
+--- a/src/mapreduce/worker.go
++++ b/src/mapreduce/worker.go
+@@ -1,8 +1,11 @@
+ package mapreduce
+ 
+ import (
++	"encoding/json"
+ 	"fmt"
++	"io/ioutil"
+ 	"net"
++	"os"
+ 	"sync/atomic"
+ 	"time"
+ )
+@@ -56,7 +59,25 @@ func (w *Worker) DoMap(inputFileName string, mapperNum, numReducers uint) {
+ 		mapperNum, inputFileName, numReducers)
+ 
+ 	// FIXME: Remove the line below and implement me when ready.
+-	w.mapF("", "") // FIXME: Don't forget to remove me!
++	content, _ := ioutil.ReadFile(inputFileName)
++	result := w.mapF(inputFileName, string(content))
++	buckets := make([][]KeyValue, numReducers)
++	for i := 0; i < int(numReducers); i++ {
++		buckets[i] = make([]KeyValue, 0)
++	}
++	for _, kv := range result {
++		k := kv.Key
++		buckets[ihash(k)%uint32(numReducers)] = append(buckets[ihash(k)%uint32(numReducers)], kv)
++	}
++	for i := 0; i < int(numReducers); i++ {
++		output_name := reduceInputName(w.jobName, mapperNum, uint(i))
++		output_file, _ := os.Create(output_name)
++		enc := json.NewEncoder(output_file)
++		for _, kv := range buckets[i] {
++			enc.Encode(&kv)
++		}
++		output_file.Close()
++	}
+ }
+ 
+ // Run's the user's reduce function on the given inputs. It does this by reading
+@@ -71,7 +92,29 @@ func (w *Worker) DoReduce(reducerNum, numMappers uint) {
+ 		reducerNum, numMappers)
+ 
+ 	// FIXME: Remove the line below and implement me when ready.
+-	w.reduceF("", make([]string, 0)) // FIXME: Don't forget to remove me!
++	data := make(map[string][]string)
++	for i := 0; i < int(numMappers); i++ {
++		input_name := reduceInputName(w.jobName, uint(i), reducerNum)
++		input_file, _ := os.Open(input_name)
++		dec := json.NewDecoder(input_file)
++		var kv KeyValue
++		for err := dec.Decode(&kv); err == nil; err = dec.Decode(&kv) {
++			if data[kv.Key] == nil {
++				data[kv.Key] = []string{kv.Value}
++			} else {
++				data[kv.Key] = append(data[kv.Key], kv.Value)
++			}
++		}
++		input_file.Close()
++	}
++	output_name := ReduceOutputName(w.jobName, reducerNum)
++	output_file, _ := os.Create(output_name)
++	enc := json.NewEncoder(output_file)
++	for k, v := range data {
++		kv := KeyValue{k, w.reduceF(k, v)}
++		enc.Encode(&kv)
++	}
++	output_file.Close()
+ }
+ 
+ // Shuts the worker down by shutting down the RPC server.
+diff --git a/src/wordcount/main.go b/src/wordcount/main.go
+index 19cabfd..3b08e28 100644
+--- a/src/wordcount/main.go
++++ b/src/wordcount/main.go
+@@ -2,6 +2,9 @@ package main
+ 
+ import (
+ 	mr "mapreduce"
++	"strconv"
++	"strings"
++	"unicode"
+ )
+ 
+ // The mapping function is called once for each piece of the input. In this
+@@ -10,7 +13,14 @@ import (
+ // pairs, each represented by a mapreduce.KeyValue.
+ func mapF(fileName string, contents string) (res []mr.KeyValue) {
+ 	// FIXME: Implement me.
+-
++	f := func(c rune) bool {
++		return !unicode.IsLetter(c)
++	}
++	words := strings.FieldsFunc(contents, f)
++	res = make([]mr.KeyValue, 0)
++	for _, word := range words {
++		res = append(res, mr.KeyValue{word, "1"})
++	}
+ 	return
+ }
+ 
+@@ -20,7 +30,7 @@ func mapF(fileName string, contents string) (res []mr.KeyValue) {
+ func reduceF(key string, values []string) string {
+ 	// FIXME: Implement me.
+ 
+-	return ""
++	return strconv.Itoa(len(values))
+ }
+ 
+ // Parses the command line arguments and runs the computation. "Running the
+diff --git a/test.sh b/test.sh
+index 79c2ede..b926d53 100755
+--- a/test.sh
++++ b/test.sh
+@@ -1,6 +1,6 @@
+ #! /usr/bin/env bash
+ 
+-verbose=false
++verbose=true
+ goflags=""
+ if [[ $1 = "-v" ]]; then
+   verbose=true
+@@ -53,7 +53,7 @@ function build_run_bin() {
+   local name=$1
+   local inputs=${@:2}
+ 
+-  rm -f $output
++  # rm -f $output
+ 
+   go build $name
+   if [ $? -ne 0 ]; then
+@@ -78,14 +78,14 @@ function check_output() {
+   local diff="data/output/diff-${name}.out"
+ 
+   # clean up all of the job's output except the final result
+-  rm -f data/output/mr.${name}*
++  # rm -f data/output/mr.${name}*
+ 
+   if ! [ -s "${output}" ]; then
+     echo "${name} completed with no output. '${output}' is empty."
+     exit 1
+   fi
+ 
+-  rm -f $diff
++  # rm -f $diff
+   cat $output | eval $diff_cmd | diff - $expected > $diff
+   if [ -s $diff ]; then
+     echo "Failed test. Output should be as in ${expected}."
+@@ -94,7 +94,7 @@ function check_output() {
+     cat $diff | tail -n +2
+     exit 1
+   else
+-    rm -f $output
++    # rm -f $output
+     rm -f $diff
+   fi
+ }
