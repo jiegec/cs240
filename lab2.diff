@@ -1,3 +1,47 @@
+diff --git a/src/invertedindex/main.go b/src/invertedindex/main.go
+index 32aaafb..1a155ba 100644
+--- a/src/invertedindex/main.go
++++ b/src/invertedindex/main.go
+@@ -1,7 +1,11 @@
+ package main
+ 
+ import (
++	"fmt"
+ 	mr "mapreduce"
++	"sort"
++	"strings"
++	"unicode"
+ )
+ 
+ // The mapping function is called once for each piece of the input. In this
+@@ -11,6 +15,17 @@ import (
+ func mapF(fileName string, contents string) (res []mr.KeyValue) {
+ 	// FIXME: Implement me.
+ 
++	f := func(c rune) bool {
++		return !unicode.IsLetter(c)
++	}
++	words := strings.FieldsFunc(contents, f)
++	set := make(map[string]bool, 0)
++	for _, word := range words {
++		set[word] = true
++	}
++	for word, _ := range set {
++		res = append(res, mr.KeyValue{word, fileName})
++	}
+ 	return
+ }
+ 
+@@ -20,7 +35,8 @@ func mapF(fileName string, contents string) (res []mr.KeyValue) {
+ func reduceF(key string, values []string) string {
+ 	// FIXME: Implement me.
+ 
+-	return ""
++	sort.Strings(values)
++	return fmt.Sprintf("%d %s", len(values), strings.Join(values, ","))
+ }
+ 
+ // Parses the command line arguments and runs the computation. "Running the
 diff --git a/src/mapreduce/parallel_master.go b/src/mapreduce/parallel_master.go
 index 9e64018..75bd863 100644
 --- a/src/mapreduce/parallel_master.go
@@ -157,7 +201,7 @@ index 8af480c..423fe4c 100644
  
  // Shuts the worker down by shutting down the RPC server.
 diff --git a/src/wordcount/main.go b/src/wordcount/main.go
-index 19cabfd..3b08e28 100644
+index 19cabfd..063093d 100644
 --- a/src/wordcount/main.go
 +++ b/src/wordcount/main.go
 @@ -2,6 +2,9 @@ package main
@@ -170,7 +214,7 @@ index 19cabfd..3b08e28 100644
  )
  
  // The mapping function is called once for each piece of the input. In this
-@@ -10,7 +13,14 @@ import (
+@@ -10,7 +13,13 @@ import (
  // pairs, each represented by a mapreduce.KeyValue.
  func mapF(fileName string, contents string) (res []mr.KeyValue) {
  	// FIXME: Implement me.
@@ -179,14 +223,13 @@ index 19cabfd..3b08e28 100644
 +		return !unicode.IsLetter(c)
 +	}
 +	words := strings.FieldsFunc(contents, f)
-+	res = make([]mr.KeyValue, 0)
 +	for _, word := range words {
-+		res = append(res, mr.KeyValue{word, "1"})
++		res = append(res, mr.KeyValue{word, ""})
 +	}
  	return
  }
  
-@@ -20,7 +30,7 @@ func mapF(fileName string, contents string) (res []mr.KeyValue) {
+@@ -20,7 +29,7 @@ func mapF(fileName string, contents string) (res []mr.KeyValue) {
  func reduceF(key string, values []string) string {
  	// FIXME: Implement me.
  
@@ -196,7 +239,7 @@ index 19cabfd..3b08e28 100644
  
  // Parses the command line arguments and runs the computation. "Running the
 diff --git a/test.sh b/test.sh
-index 79c2ede..081e7ac 100755
+index 79c2ede..2192fba 100755
 --- a/test.sh
 +++ b/test.sh
 @@ -1,6 +1,6 @@
@@ -218,7 +261,7 @@ index 79c2ede..081e7ac 100755
 +# run_test 1 go test mapreduce --cwd="$PWD" -run SequentialNoMerge $goflags
 +# run_test 2 go test mapreduce --cwd="$PWD" -run FullSequential $goflags
 +# run_test 3 test_wc
-+run_test 4 go test mapreduce --cwd="$PWD" -run Parallel -v $goflags
++# run_test 4 go test mapreduce --cwd="$PWD" -run Parallel -v $goflags
  run_test 5 test_ii
  # run_test 6 test_pr # TODO: Uncomment me for extra credit phase.
  
